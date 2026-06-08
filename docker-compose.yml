@@ -1,16 +1,15 @@
 services:
   postgres:
     image: postgres:latest
-    container_name: postgres-db
+    container_name: uncommon-postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
-      # obviously for an actual deployment, use something secure
       POSTGRES_USER: appuser
       POSTGRES_PASSWORD: apppassword
+      POSTGRES_DB: uncommon_dev
     volumes:
-      - pgdata:/var/lib/postgresql
+      - uncommon_pgdata:/var/lib/postgresql/data
 
 volumes:
-  pgdata:
-    name: pgdata
+  uncommon_pgdata:

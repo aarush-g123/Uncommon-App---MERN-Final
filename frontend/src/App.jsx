@@ -1,114 +1,68 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
-
-const loadGoogleIdentityScript = () =>
-  new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) {
-      resolve()
-      return
-    }
-
-    const existingScript = document.querySelector(
-      'script[data-google-identity="true"]',
-    )
-    if (existingScript) {
-      existingScript.addEventListener('load', () => resolve())
-      existingScript.addEventListener('error', () =>
-        reject(new Error('Google Identity script failed to load.')),
-      )
-      return
-    }
-
-    const script = document.createElement('script')
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    script.dataset.googleIdentity = 'true'
-    script.onload = () => resolve()
-    script.onerror = () =>
-      reject(new Error('Google Identity script failed to load.'))
-    document.head.appendChild(script)
-  })
-
-const decodeJwtPayload = (token) => {
-  try {
-    const payload = token.split('.')[1]
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const padded = normalized.padEnd(
-      normalized.length + ((4 - (normalized.length % 4)) % 4),
-      '=',
-    )
-    const json = atob(padded)
-    return JSON.parse(json)
-  } catch (error) {
-    return null
-  }
-}
+const TOKEN_KEY = 'uncommon_token'
 
 function App() {
+  const [mode, setMode] = useState('login')
+  const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [user, setUser] = useState(null)
-  const [authError, setAuthError] = useState('')
+  const [message, setMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const buttonRef = useRef(null)
 
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || !buttonRef.current) {
-      return
-    }
+    const token = localStorage.getItem(TOKEN_KEY)
+    if (!token) return
 
-    let isActive = true
-    setIsLoading(true)
-
-    loadGoogleIdentityScript()
-      .then(() => {
-        if (!isActive) return
-
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: (response) => {
-            const profile = decodeJwtPayload(response.credential)
-            if (!profile) {
-              setAuthError('We could not read the Google profile payload.')
-              return
-            }
-            setAuthError('')
-            setUser({
-              name: profile.name,
-              email: profile.email,
-              picture: profile.picture,
-            })
-          },
-        })
-
-        window.google.accounts.id.renderButton(buttonRef.current, {
-          theme: 'outline',
-          size: 'large',
-          shape: 'pill',
-          text: 'continue_with',
-          width: 320,
-        })
-
-        window.google.accounts.id.prompt()
-        setIsLoading(false)
-      })
-      .catch((error) => {
-        if (!isActive) return
-        setAuthError(error.message)
-        setIsLoading(false)
-      })
-
-    return () => {
-      isActive = false
-    }
+    fetch('/api/users/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data) => setUser(data.user))
+      .catch(() => localStorage.removeItem(TOKEN_KEY))
   }, [])
 
-  const handleSignOut = () => {
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.disableAutoSelect()
+  const updateField = (event) => {
+    setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
+  }
+
+  const submitAuth = async (event) => {
+    event.preventDefault()
+    setIsLoading(true)
+    setMessage('')
+
+    const endpoint = mode === 'signup' ? '/api/users/signup' : '/api/users/login'
+    const body =
+      mode === 'signup'
+        ? form
+        : { email: form.email, password: form.password }
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Something went wrong.')
+      }
+
+      localStorage.setItem(TOKEN_KEY, data.token)
+      setUser(data.user)
+      setForm({ name: '', email: '', password: '' })
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  const signOut = () => {
+    localStorage.removeItem(TOKEN_KEY)
     setUser(null)
+    setMessage('')
   }
 
   return (
@@ -128,41 +82,83 @@ function App() {
       </header>
 
       <section className="auth-card">
-        <div>
-          <h2>Sign in with Google</h2>
-          <p>
-            Use your Google account to start tracking applications. We will
-            verify the token server-side later.
-          </p>
-        </div>
-
-        {!GOOGLE_CLIENT_ID ? (
-          <div className="callout">
-            Add <strong>VITE_GOOGLE_CLIENT_ID</strong> in a frontend .env file
-            to enable Google sign in.
-          </div>
-        ) : (
-          <div className="auth-actions">
-            <div ref={buttonRef} className="google-button" />
-            {isLoading && <span className="muted">Loading Google...</span>}
-          </div>
-        )}
-
-        {authError && <div className="error">{authError}</div>}
-
-        {user && (
-          <div className="profile">
-            <div className="profile-details">
-              <img src={user.picture} alt="" />
-              <div>
-                <p className="profile-name">{user.name}</p>
-                <p className="muted">{user.email}</p>
-              </div>
+        {user ? (
+          <>
+            <div>
+              <h2>Welcome, {user.name}</h2>
+              <p>You are signed in as {user.email}.</p>
             </div>
-            <button className="ghost" type="button" onClick={handleSignOut}>
+            <button className="primary-button" type="button" onClick={signOut}>
               Sign out
             </button>
-          </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <h2>{mode === 'signup' ? 'Create an account' : 'Log in'}</h2>
+              <p>
+                This uses normal email/password authentication with PostgreSQL and a JWT token.
+              </p>
+            </div>
+
+            <form className="auth-form" onSubmit={submitAuth}>
+              {mode === 'signup' && (
+                <label>
+                  Name
+                  <input
+                    name="name"
+                    value={form.name}
+                    onChange={updateField}
+                    placeholder="Evan Chin"
+                    autoComplete="name"
+                  />
+                </label>
+              )}
+
+              <label>
+                Email
+                <input
+                  name="email"
+                  type="email"
+                  value={form.email}
+                  onChange={updateField}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                />
+              </label>
+
+              <label>
+                Password
+                <input
+                  name="password"
+                  type="password"
+                  value={form.password}
+                  onChange={updateField}
+                  placeholder="At least 6 characters"
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                />
+              </label>
+
+              {message && <div className="error">{message}</div>}
+
+              <button className="primary-button" type="submit" disabled={isLoading}>
+                {isLoading ? 'Working...' : mode === 'signup' ? 'Sign up' : 'Log in'}
+              </button>
+            </form>
+
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => {
+                setMode(mode === 'signup' ? 'login' : 'signup')
+                setMessage('')
+              }}
+            >
+              {mode === 'signup'
+                ? 'Already have an account? Log in'
+                : "Don't have an account? Sign up"}
+            </button>
+          </>
         )}
       </section>
 

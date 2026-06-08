@@ -1,9 +1,4 @@
-// Central place to import and initialize Sequelize models.
-// Example registration pattern:
-// const User = require('./user')(sequelize, DataTypes);
-// const College = require('./college')(sequelize, DataTypes);
-
-import { DataTypes } from "sequelize";
 import { sequelize } from "../config/db.js";
+import { User } from "./User.js";
 
-export { sequelize, DataTypes };
+export { sequelize, User };
