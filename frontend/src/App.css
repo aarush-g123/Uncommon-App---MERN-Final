@@ -143,11 +143,17 @@
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 24px;
+  padding: 28px;
 }
 
 .feature-grid h3 {
   margin: 0 0 8px;
+}
+
+.feature-icon {
+  font-size: 28px;
+  margin-bottom: 12px;
+  line-height: 1;
 }
 
 @media (max-width: 900px) {
