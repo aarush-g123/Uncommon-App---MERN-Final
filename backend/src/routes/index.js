@@ -4,10 +4,11 @@ const router = express.Router();
 // Health check
 router.get("/health", (req, res) => res.json({ status: "ok" }));
 
-// Mount resource routers (create files in src/routes/)
+import authRouter from "./auth.js";
 import collegesRouter from "./colleges.js";
 import usersRouter from "./users.js";
 
+router.use("/auth", authRouter);
 router.use("/colleges", collegesRouter);
 router.use("/users", usersRouter);
 

@@ -1,59 +1,41 @@
 import { User } from "../models/index.js";
+import { hashPassword, verifyPassword, createToken } from "../utils/auth.js";
 
-const verifyGoogleCredential = async (credential) => {
-  if (!credential) {
-    throw new Error("Missing Google credential.");
+export const register = async (req, res, next) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "name, email, and password are required" });
+    }
+
+    const existing = await User.findOne({ where: { email } });
+    if (existing) {
+      return res.status(409).json({ error: "Email already in use" });
+    }
+
+    const user = await User.create({ name, email, passwordHash: hashPassword(password) });
+    const token = createToken(user);
+
+    res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email } });
+  } catch (error) {
+    next(error);
   }
-
-  if (!process.env.GOOGLE_CLIENT_ID) {
-    throw new Error("GOOGLE_CLIENT_ID is missing on the backend.");
-  }
-
-  const response = await fetch(
-    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(
-      credential,
-    )}`,
-  );
-
-  if (!response.ok) {
-    throw new Error("Google rejected this sign-in token.");
-  }
-
-  const profile = await response.json();
-
-  if (profile.aud !== process.env.GOOGLE_CLIENT_ID) {
-    throw new Error("Google token was not issued for this app.");
-  }
-
-  if (profile.email_verified !== "true" && profile.email_verified !== true) {
-    throw new Error("Google account email is not verified.");
-  }
-
-  return profile;
 };
 
-export const googleLogin = async (req, res, next) => {
+export const login = async (req, res, next) => {
   try {
-    const profile = await verifyGoogleCredential(req.body.credential);
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
 
-    const [user] = await User.upsert(
-      {
-        googleId: profile.sub,
-        email: profile.email,
-        name: profile.name || profile.email,
-        picture: profile.picture || null,
-      },
-      { returning: true },
-    );
+    const user = await User.findOne({ where: { email } });
+    if (!user || !verifyPassword(password, user.passwordHash)) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
 
-    res.json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        picture: user.picture,
-      },
-    });
+    const token = createToken(user);
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
   } catch (error) {
     next(error);
   }

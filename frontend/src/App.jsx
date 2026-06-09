@@ -109,7 +109,7 @@ function App() {
                     name="name"
                     value={form.name}
                     onChange={updateField}
-                    placeholder="Evan Chin"
+                    placeholder="Your Name"
                     autoComplete="name"
                   />
                 </label>
